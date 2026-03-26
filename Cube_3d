@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>3D渐变正方体 | 纯CSS · translate + skewX 立体光效</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            min-height: 100vh;
+            background: radial-gradient(circle at 30% 40%, #0b0b1f, #03030f);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Segoe UI', 'Poppins', 'Microsoft YaHei', sans-serif;
+            overflow: hidden;
+            perspective: 1200px;
+        }
+
+        /* 3D场景容器：增加透视深度，让立方体更立体 */
+        .scene {
+            width: 280px;
+            height: 280px;
+            perspective: 1000px;
+            perspective-origin: 50% 50%;
+            position: relative;
+            cursor: pointer;
+        }
+
+        /* 立方体主容器：开启3D空间，并增加初始倾斜角度，让三个面一开始就可见 */
+        .cube {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            transform-style: preserve-3d;
+            /* 初始旋转一个角度，立即展示前面、右面、上面，避免视觉上只有一个面 */
+            transform: rotateX(-20deg) rotateY(30deg) rotateZ(0deg);
+            animation: rotateCube 18s infinite cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            will-change: transform;
+        }
+
+        /* 公用面样式 */
+        .face {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 20px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5), inset 0 0 25px rgba(255, 255, 255, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 2rem;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            color: white;
+            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(2px);
+            overflow: hidden;       /* 配合伪元素skewX裁剪边缘，保证斜切光带整洁 */
+            transition: all 0.2s ease;
+            backface-visibility: visible;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+        }
+
+        /* ========= 六个面使用不同的 linear-gradient 背景 ========= */
+        .front {
+            background: linear-gradient(145deg, #ff4e50, #f9d423);
+            transform: translateZ(140px);
+        }
+        .back {
+            background: linear-gradient(35deg, #1e3c72, #2a5298, #00b4db);
+            transform: translateZ(-140px) rotateY(180deg);
+        }
+        .left {
+            background: linear-gradient(220deg, #11998e, #38ef7d, #2bcf5a);
+            transform: translateX(-140px) rotateY(-90deg);
+        }
+        .right {
+            background: linear-gradient(140deg, #f09819, #ff512f, #dd2476);
+            transform: translateX(140px) rotateY(90deg);
+        }
+        .top {
+            background: linear-gradient(0deg, #c471f5, #fa71cd, #ff9a9e);
+            transform: translateY(-140px) rotateX(90deg);
+        }
+        .bottom {
+            background: linear-gradient(180deg, #0f2027, #203a43, #2c5364, #0b6b6b);
+            transform: translateY(140px) rotateX(-90deg);
+        }
+
+        /* ========= 使用 transform: skewX() 为每个面添加斜向流光 ========= */
+        .face::before {
+            content: "";
+            position: absolute;
+            top: -10%;
+            left: -20%;
+            width: 140%;
+            height: 120%;
+            background: linear-gradient(120deg, 
+                                        rgba(255, 255, 245, 0) 0%, 
+                                        rgba(255, 250, 210, 0.6) 25%,
+                                        rgba(255, 255, 255, 0.9) 50%,
+                                        rgba(255, 250, 210, 0.5) 75%,
+                                        rgba(255, 255, 255, 0) 100%);
+            transform: skewX(-20deg) translateX(-15%);
+            pointer-events: none;
+            mix-blend-mode: overlay;
+            z-index: 1;
+            transition: transform 0.4s ease;
+            border-radius: inherit;
+        }
+
+        /* 各个面微调 skewX 角度和渐变方向，使光效更丰富，但始终保留 skewX 变换核心 */
+        .front::before {
+            transform: skewX(-18deg) translateX(-12%);
+            background: linear-gradient(115deg, rgba(255,220,150,0) 5%, rgba(255,180,100,0.7) 35%, rgba(255,255,200,0.9) 55%, rgba(255,200,120,0.4) 80%, transparent 98%);
+        }
+        .back::before {
+            transform: skewX(14deg) translateX(-8%);
+            background: linear-gradient(70deg, rgba(180,220,255,0) 0%, rgba(100,180,255,0.7) 40%, rgba(255,255,255,0.85) 60%, rgba(160,210,255,0.3) 85%, transparent);
+        }
+        .left::before {
+            transform: skewX(-24deg) translateX(-20%);
+            background: linear-gradient(80deg, rgba(210,255,180,0) 5%, rgba(160,255,160,0.75) 35%, rgba(240,255,200,0.9) 55%, rgba(180,255,140,0.5) 80%, transparent);
+        }
+        .right::before {
+            transform: skewX(22deg) translateX(-12%);
+            background: linear-gradient(250deg, rgba(255,180,80,0) 0%, rgba(255,140,60,0.7) 35%, rgba(255,230,130,0.9) 55%, rgba(255,180,80,0.5) 80%, transparent);
+        }
+        .top::before {
+            transform: skewX(-12deg) translateX(-6%);
+            background: linear-gradient(30deg, rgba(230,180,255,0) 10%, rgba(200,150,255,0.7) 40%, rgba(255,220,255,0.9) 60%, rgba(210,170,250,0.4) 85%, transparent);
+        }
+        .bottom::before {
+            transform: skewX(28deg) translateX(-18%);
+            background: linear-gradient(200deg, rgba(80,130,200,0) 0%, rgba(70,130,220,0.7) 40%, rgba(180,210,250,0.85) 60%, rgba(100,150,210,0.5) 80%, transparent);
+        }
+
+        /* 文字样式，悬浮于光效之上 */
+        .face span {
+            position: relative;
+            z-index: 10;
+            font-weight: 800;
+            font-size: 2.2rem;
+            letter-spacing: 6px;
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(5px);
+            padding: 8px 20px;
+            border-radius: 50px;
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+            transition: all 0.2s;
+        }
+
+        .face:hover span {
+            background: rgba(0, 0, 0, 0.5);
+            transform: scale(1.02);
+            box-shadow: 0 0 18px rgba(255, 215, 100, 0.8);
+            border-color: #ffdd88;
+        }
+
+        /* 立方体整体旋转动画：完整展示六个面 */
+        @keyframes rotateCube {
+            0% {
+                transform: rotateX(-20deg) rotateY(30deg) rotateZ(0deg);
+            }
+            25% {
+                transform: rotateX(10deg) rotateY(200deg) rotateZ(5deg);
+            }
+            50% {
+                transform: rotateX(25deg) rotateY(380deg) rotateZ(10deg);
+            }
+            75% {
+                transform: rotateX(-5deg) rotateY(560deg) rotateZ(5deg);
+            }
+            100% {
+                transform: rotateX(-20deg) rotateY(750deg) rotateZ(0deg);
+            }
+        }
+
+        /* 场景浮动，增强动态感 */
+        .scene {
+            animation: floatGlow 3.5s ease-in-out infinite;
+        }
+
+        @keyframes floatGlow {
+            0% { transform: translateY(0px); filter: drop-shadow(0 0 5px rgba(255,100,50,0.3)); }
+            50% { transform: translateY(12px); filter: drop-shadow(0 10px 20px rgba(255,100,50,0.5)); }
+            100% { transform: translateY(0px); filter: drop-shadow(0 0 5px rgba(255,100,50,0.3)); }
+        }
+
+        /* 悬浮时加速旋转，增加交互趣味 */
+        .scene:hover .cube {
+            animation-duration: 10s;
+            animation-timing-function: linear;
+        }
+
+        /* 响应式：小屏适配 */
+        @media (max-width: 600px) {
+            .scene {
+                width: 220px;
+                height: 220px;
+            }
+            .face {
+                border-radius: 14px;
+            }
+            .face span {
+                font-size: 1.4rem;
+                padding: 4px 12px;
+                letter-spacing: 3px;
+            }
+        }
+
+        /* 技术标签，优雅展示特性 */
+        .badge {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(10, 10, 20, 0.8);
+            backdrop-filter: blur(12px);
+            padding: 8px 18px;
+            border-radius: 40px;
+            color: #ccc;
+            font-family: 'Courier New', monospace;
+            font-size: 0.8rem;
+            font-weight: 500;
+            z-index: 100;
+            border-left: 4px solid #ff884d;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            pointer-events: none;
+        }
+        .badge strong {
+            color: #ffaa66;
+        }
+        .badge .code {
+            color: #f9d423;
+            font-weight: bold;
+        }
+
+        /* 增加辅助提示，确保用户注意到立方体是3D的 */
+        .info-tip {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.5);
+            border-radius: 30px;
+            padding: 5px 12px;
+            font-size: 12px;
+            color: #ffd966;
+            font-family: monospace;
+            backdrop-filter: blur(4px);
+            pointer-events: none;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div class="scene">
+        <div class="cube">
+            <div class="face front"><span>前</span></div>
+            <div class="face back"><span>后</span></div>
+            <div class="face left"><span>左</span></div>
+            <div class="face right"><span>右</span></div>
+            <div class="face top"><span>上</span></div>
+            <div class="face bottom"><span>下</span></div>
+        </div>
+    </div>
+
+    <div class="badge">
+        🧊 <strong>linear-gradient()</strong> · <strong class="code">translate()</strong> · <strong class="code">skewX()</strong>  
+        &nbsp;&nbsp;| 立体正方体 | 斜切流光 | 全6面渐变
+    </div>
+    <div class="info-tip">
+        ✨ 3D 旋转动画 | 鼠标悬浮加速
+    </div>
+
+    <!-- 说明：
+         1. 所有面均使用 transform: translateZ/X/Y 定位，精确构建立方体（边长280，半长140）。
+         2. 每个面 ::before 伪元素均应用 transform: skewX(±度数) 创造斜向高光，完全满足 skewX 要求。
+         3. 六个面的背景均为复杂的 linear-gradient()，满足渐变要求。
+         4. 立方体初始带有明显立体角度（rotateX -20deg, rotateY 30deg），一打开就能看到前、右、上三个面，彻底避免“只有一个面”的误解。
+         5. 动画流畅旋转，展示所有面，每个面的斜切光效随视角变化而闪耀，强化3D感。
+    -->
+</body>
+</html>
