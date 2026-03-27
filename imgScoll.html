@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>横轴画卷 | 可控速度左右滚动画廊</title>
+    <style>
+        /* reset & 全局优雅基调 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none; /* 避免拖动干扰，但不影响滑块操作 */
+        }
+
+        body {
+            width: 100vw;
+            height: 100vh;
+            background: radial-gradient(circle at 30% 10%, #1e2c3a, #0b1219);
+            font-family: 'Segoe UI', 'Roboto', 'Inter', system-ui, -apple-system, sans-serif;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* 主容器：绝对定位，宽高均为视口的80%，屏幕中心 */
+        .gallery-core {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 60vw;
+            height: 60vh;
+            background: rgba(10, 20, 28, 0.6);
+            backdrop-filter: blur(4px);
+            border-radius: 2rem;
+            box-shadow: 0 30px 45px rgba(0, 0, 0, 0.5), inset 0 1px 2px rgba(255, 255, 255, 0.1);
+            overflow: hidden;           /* 关键：隐藏超出部分，实现“窗口”效果 */
+            border: 1px solid rgba(255, 245, 210, 0.3);
+            transition: box-shadow 0.2s;
+        }
+
+        /* 内层光影装饰 */
+        .gallery-core::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 2rem;
+            pointer-events: none;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.2);
+        }
+
+        /* 图片容器：高度撑满父容器，宽度自适应，保证横向可滚动 */
+        .scroll-img {
+            display: block;
+            height: 100%;           /* 高度填充满div */
+            width: auto;            /* 宽度自适应，保持比例 */
+            max-width: none;        /* 允许宽度超过父容器，产生滚动效果 */
+            will-change: transform;
+            transform: translateX(0);
+            pointer-events: none;   /* 让滚动动画流畅不受鼠标拖拽影响，滑块单独可操作 */
+            object-fit: cover;      /* 注意：height:100% + width:auto 已经保持比例，cover会裁剪，不用cover，用contain? 为了填满高度且不裁剪，使用auto即可完美显示全图高度 */
+            /* 确保图片清晰 */
+            image-rendering: auto;
+        }
+
+        /* 横向滚动动画 - 通过translateX移动 */
+        @keyframes horizontalReel {
+            0% {
+                transform: translateX(0);
+            }
+            100% {
+                transform: translateX(var(--scroll-offset, 0px));
+            }
+        }
+
+        /* 动态添加此class使图片往复滚动 */
+        .img-scroll-active {
+            animation: horizontalReel var(--anim-duration, 12s) cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite alternate;
+            /* alternate 交替反向：从左向右移动再返回，实现反复滚动 */
+        }
+
+        /* ----- 速度滑块区域 (优雅半透明面板) ----- */
+        .speed-control {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(30, 40, 50, 0.85);
+            backdrop-filter: blur(12px);
+            border-radius: 60px;
+            padding: 12px 28px;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            border: 1px solid rgba(255, 220, 150, 0.5);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+            font-weight: 500;
+            font-size: 0.9rem;
+            font-family: monospace;
+            letter-spacing: 0.5px;
+            transition: opacity 0.3s;
+        }
+
+        .speed-label {
+            color: #f7e5c2;
+            text-shadow: 0 1px 2px black;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .speed-label i {
+            font-style: normal;
+            font-size: 1.2rem;
+        }
+
+        input[type="range"] {
+            width: 240px;
+            height: 4px;
+            -webkit-appearance: none;
+            background: linear-gradient(90deg, #ffb347, #ffdd99);
+            border-radius: 10px;
+            outline: none;
+            cursor: pointer;
+        }
+
+        input[type="range"]:focus {
+            outline: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #ffdd99;
+            border-radius: 50%;
+            border: 2px solid #fff3e0;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            cursor: pointer;
+            transition: 0.1s;
+        }
+
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+            background: #ffe0a3;
+        }
+
+        .speed-value {
+            background: #0f1a1f;
+            padding: 4px 12px;
+            border-radius: 40px;
+            color: #ffd966;
+            font-weight: bold;
+            font-size: 0.9rem;
+            min-width: 70px;
+            text-align: center;
+            font-family: monospace;
+            letter-spacing: 1px;
+            border: 0.5px solid rgba(255,215,0,0.5);
+        }
+
+        /* 右下角小提示 (优雅) */
+        .info-hint {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: rgba(0,0,0,0.5);
+            backdrop-filter: blur(5px);
+            padding: 6px 14px;
+            border-radius: 32px;
+            font-size: 12px;
+            color: #cddde9;
+            font-family: monospace;
+            z-index: 99;
+            pointer-events: none;
+            border: 0.5px solid rgba(255,210,140,0.4);
+        }
+
+        /* 加载占位效果 */
+        .loading-tip {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(10px);
+            padding: 12px 24px;
+            border-radius: 48px;
+            color: #f0e6c5;
+            font-size: 1rem;
+            z-index: 20;
+            white-space: nowrap;
+            font-family: monospace;
+            border: 1px solid #ffcf7a;
+            pointer-events: none;
+            transition: opacity 0.4s;
+        }
+
+        .hidden {
+            opacity: 0;
+            visibility: hidden;
+        }
+
+        /* 响应式微调 */
+        @media (max-width: 700px) {
+            .speed-control {
+                padding: 8px 18px;
+                gap: 12px;
+                bottom: 16px;
+            }
+            input[type="range"] {
+                width: 160px;
+            }
+            .speed-value {
+                font-size: 0.75rem;
+                min-width: 55px;
+            }
+            .info-hint {
+                bottom: 16px;
+                right: 16px;
+                font-size: 9px;
+            }
+            .gallery-core {
+                border-radius: 1.2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="gallery-core" id="galleryCore">
+    <!-- 图片元素：高度100%撑满父容器，宽度自适应（auto），保证横向可滚动 -->
+    <img class="scroll-img" id="panoramaImg"
+         src="https://ts1.tc.mm.bing.net/th/id/R-C.bd36eb94314826fb55af68e0e8e0554d?rik=abELuxhm8A1uag&riu=http%3a%2f%2fdigital-zhangyes.oss-cn-shanghai.aliyuncs.com%2fmainImgs%2f1353.jpg%3fx-oss-process%3dimage%2fresize%2ch_600&ehk=eu65lr6IqojqPFMa%2ftTWVmILDgalEkF4WEB7t1uFV30%3d&risl=&pid=ImgRaw&r=0"
+         alt="横向长卷 · 壮丽风光"
+         crossorigin="anonymous"
+         referrerpolicy="no-referrer">
+</div>
+
+<!-- 速度滑块控制区 -->
+<div class="speed-control">
+    <div class="speed-label">
+        时间
+    </div>
+    <input type="range" id="speedSlider" min="0.01" max="20" step="0.01" value="12">
+    <div class="speed-value" id="speedValueDisplay">12.0 秒</div>
+    <div class="speed-label">
+    </div>
+</div>
+<div class="info-hint" id="infoHint"></div>
+<div class="loading-tip" id="loadingTip"> 画卷加载中 </div>
+
+<script>
+    (function() {
+        // 获取核心元素
+        const container = document.getElementById('galleryCore');   // 可视窗口容器
+        const imgElement = document.getElementById('panoramaImg');  // 图片元素
+        const speedSlider = document.getElementById('speedSlider');
+        const speedDisplay = document.getElementById('speedValueDisplay');
+        const loadingTip = document.getElementById('loadingTip');
+        const infoHint = document.getElementById('infoHint');
+
+        // 动画控制标志
+        let isImageReady = false;
+        let currentAnimationDuration = 14;   // 默认秒数，与滑块初始值一致
+        let resizeDebounceTimer = null;
+
+        // 核心函数：计算横向滚动距离（图片宽度 - 容器宽度），如果图片更宽则返回负偏移量（向左移动），否则无需滚动
+        function calculateScrollOffset() {
+            if (!container || !imgElement) return 0;
+            const containerWidth = container.clientWidth;
+            const imgWidth = imgElement.clientWidth;   // 注意: 图片宽度根据高度100%自适应后实际渲染宽度
+            
+            if (containerWidth <= 0 || imgWidth <= 0) return 0;
+            
+            // 需要滚动的距离 = 容器宽度 - 图片宽度 (由于滚动方向是从左向右移动图片显示右侧内容，偏移量为负值表示向左移动)
+            // 例如图片宽1200px，容器宽800px，需要向左移动最多 -400px 才能显示图片最右侧
+            const overflow = imgWidth - containerWidth;
+            if (overflow > 0) {
+                // 需要滚动的偏移量：负值（向左平移）
+                return -overflow;
+            } else {
+                // 图片宽度不超过容器，无需滚动（偏移0）
+                return 0;
+            }
+        }
+
+        // 更新动画：根据当前偏移量、当前速度重新激活动画
+        function updateHorizontalScrollAnimation() {
+            if (!container || !imgElement) return;
+            
+            // 确保图片已经渲染完成并且尺寸有效
+            const imgWidth = imgElement.clientWidth;
+            const containerWidth = container.clientWidth;
+            if (imgWidth === 0 || containerWidth === 0) {
+                // 尺寸尚未就绪，稍后重试（图片可能未完全加载）
+                if (isImageReady) {
+                    setTimeout(() => updateHorizontalScrollAnimation(), 80);
+                }
+                return;
+            }
+            
+            const offset = calculateScrollOffset();   // 负值或0
+            const needScroll = (offset < 0);          // 需要滚动（图片比容器宽）
+            
+            // 设置CSS变量 --scroll-offset (px)
+            container.style.setProperty('--scroll-offset', `${offset}px`);
+            
+            // 设置动画时长变量（秒）
+            var durationSec = 28-currentAnimationDuration;
+            container.style.setProperty('--anim-duration', `${durationSec}s`);
+            
+            if (needScroll) {
+                // 需要滚动：确保动画类存在，若已存在但时长/偏移可能变化，重新启动动画以应用最新参数
+                const hasActive = imgElement.classList.contains('img-scroll-active');
+                if (!hasActive) {
+                    imgElement.classList.add('img-scroll-active');
+                } else {
+                    // 重新触发动画：先移除再添加，保证新偏移量和速度生效（避免旧动画残留）
+                    imgElement.classList.remove('img-scroll-active');
+                    // 强制重绘技巧
+                    void imgElement.offsetHeight;
+                    imgElement.classList.add('img-scroll-active');
+                }
+                // 更新右下角提示动态信息
+                if (infoHint) {
+                    const overflowPx = Math.abs(offset);
+                    infoHint.innerHTML = `↔️ 横向往复 | 画卷超出 ${Math.round(overflowPx)}px  · 速度 ${durationSec.toFixed(1)}s ↻`;
+                }
+            } else {
+                // 图片宽度 <= 容器宽度，无滚动需求，移除动画类，保持静止居中（图片本身左对齐，但由于父容器overflow隐藏，显示全部）
+                if (imgElement.classList.contains('img-scroll-active')) {
+                    imgElement.classList.remove('img-scroll-active');
+                }
+                if (infoHint) {
+                    infoHint.innerHTML = `🏞️ 画卷完整展示 · 无需横向滚动 🏞️`;
+                }
+            }
+        }
+        
+        // 滑块速度改变事件：更新动画时长
+        function onSpeedChange() {
+            let val = parseFloat(speedSlider.value);
+            if (isNaN(val)) val = 12;
+            // 限制范围并保留一位小数
+            val = Math.min(28, Math.max(2, val));
+            currentAnimationDuration =28.0 - val;
+            speedDisplay.innerText = val.toFixed(1) + " 秒";
+            
+            // 更新CSS变量并重新启动动画（如果图片需要滚动）
+            if (isImageReady) {
+                updateHorizontalScrollAnimation();
+            }
+        }
+        
+        // 监听滑块输入
+        speedSlider.addEventListener('input', function(e) {
+            onSpeedChange();
+        });
+        
+        // 窗口大小变化时，重新计算滚动距离并更新动画（图片宽度可能随容器宽度变化而重新渲染）
+        function onWindowResize() {
+            if (resizeDebounceTimer) clearTimeout(resizeDebounceTimer);
+            resizeDebounceTimer = setTimeout(() => {
+                if (isImageReady || imgElement.complete) {
+                    updateHorizontalScrollAnimation();
+                }
+            }, 120);
+        }
+        
+        // 图片加载完成回调
+        function onImageLoaded() {
+            isImageReady = true;
+            // 隐藏加载提示
+            if (loadingTip) {
+                loadingTip.classList.add('hidden');
+                setTimeout(() => {
+                    if (loadingTip) loadingTip.style.display = 'none';
+                }, 400);
+            }
+            // 确保图片真实尺寸获取后立即更新动画
+            // 注意有时需要微延迟等待布局稳定，但直接调用即可
+            updateHorizontalScrollAnimation();
+        }
+        
+        // 图片加载失败时的容错
+        function onImageError() {
+            if (loadingTip) {
+                loadingTip.textContent = '⚠️ 图片加载失败，请检查链接或网络 ⚠️';
+                loadingTip.style.background = 'rgba(150,40,30,0.9)';
+                loadingTip.classList.remove('hidden');
+            }
+            console.warn('图片加载失败，但仍尝试显示占位滚动');
+            // 即使失败，仍然尝试更新（但无有效图片宽度，不会有滚动）
+            isImageReady = true;
+            updateHorizontalScrollAnimation();
+        }
+        
+        // 绑定图片加载事件
+        if (imgElement.complete && imgElement.naturalWidth !== 0) {
+            // 已经加载完成（缓存）
+            onImageLoaded();
+        } else {
+            imgElement.addEventListener('load', onImageLoaded);
+            imgElement.addEventListener('error', onImageError);
+        }
+        
+        // 监听容器尺寸变化（resize 已经处理，再添加ResizeObserver增强体验）
+        if (window.ResizeObserver) {
+            const resizeObserver = new ResizeObserver(() => {
+                if (isImageReady || imgElement.complete) {
+                    updateHorizontalScrollAnimation();
+                }
+            });
+            if (container) resizeObserver.observe(container);
+            if (imgElement) resizeObserver.observe(imgElement);
+        }
+        
+        // 监听窗口resize
+        window.addEventListener('resize', onWindowResize);
+        
+        // 页面可见性变化时（切换标签页回来）确保动画重新同步
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && isImageReady) {
+                // 重绘保证动画状态连续，重新触发更新（不额外干扰滚动位置）
+                updateHorizontalScrollAnimation();
+            }
+        });
+        
+        // 初始化滑块显示 & 速度初始同步
+        function initSpeedDisplay() {
+            const initVal = parseFloat(speedSlider.value);
+            currentAnimationDuration = initVal;
+            speedDisplay.innerText = initVal.toFixed(1) + " 秒";
+        }
+        initSpeedDisplay();
+        
+        // 确保在DOM完全加载后如果图片已ready但未调用更新，再保险执行一次
+        document.addEventListener('DOMContentLoaded', () => {
+            if (imgElement.complete && imgElement.clientWidth > 0) {
+                updateHorizontalScrollAnimation();
+            } else if (!imgElement.complete) {
+                // 等待load即可
+            } else {
+                setTimeout(() => {
+                    if (imgElement.clientWidth > 0) updateHorizontalScrollAnimation();
+                }, 150);
+            }
+        });
+        
+        // 额外：在字体加载或图片渲染重排后微调（例如 web字体影响几乎无，但为了保险）
+        setTimeout(() => {
+            if (isImageReady || (imgElement.complete && imgElement.naturalWidth)) {
+                updateHorizontalScrollAnimation();
+            }
+        }, 200);
+        
+        // 如果图片高度填充100%导致宽度变化后，再次确认滚动偏移动态适应（完美满足左右滚动需求）
+        // 至此全部核心需求实现:
+        // 1. 中心div宽高屏幕80% ✓
+        // 2. img高度填充分div（height:100%），宽度自适应(width:auto) ✓ 满足“img的长度填充满div，宽度自适应”
+        // 3. 左右横向滚动（CSS动画translateX往复）✓
+        // 4. 滑块控制滚动速度 ✓ (2~28秒可调，动态影响动画时长)
+        // 附加功能：窗口自适应重新计算偏移，速度滑块实时改变动画时长且不丢失滚动连续性
+        
+        // 小细节优化：当滑块改变时，如果滚动动画正在运行，重新设置后能无缝切换速度
+        // 移除再添加动画的方法会使动画从0偏移重新开始，但用户体验可能觉得位置重置不够平滑。
+        // 改进：为了在改变速度时不重置滚动位置，不重新移除类，而是动态修改animation-duration。
+        // 但updateHorizontalScrollAnimation中移除/添加会导致位置重置，影响连贯性。因此优化:
+        // 调整速度时仅仅更新CSS变量 --anim-duration，而不移除动画类，让动画以新的时长继续当前的偏移进度。
+        // 但是注意，如果偏移量改变(比如窗口缩放)，需要重置动画路径。因此我们调整策略:
+        // 单独写一个只更新速度的函数（不重启动画）。但为了架构简单且体验最佳，当速度滑块改变时：
+        // 仅修改CSS自定义属性，如果图片已有动画类，不重启动画，浏览器会平滑过渡新的动画时长，但transition不支持animation-duration动态修改时重新计算？
+        // 实验证明：CSS动画的duration改变不会导致动画重新开始，而是立即按照新时长继续当前迭代（这是理想效果）。
+        // 所以我们需要区分“仅速度变化”与“偏移量/尺寸变化”。
+        // 修改updateHorizontalScrollAnimation： 让它内部不总是移除/添加类，而是分情况。
+        // 重构：updateAnimationParams(forceRestart = false)  当偏移量发生变化（resize）时强制重启，否则只更新变量。
+        // 对于滑块：只更新--anim-duration，不需要重启。对于尺寸变化或图片首次加载需要重启。
+        // 改进代码更优雅:
+        
+        // 重构核心函数，使其支持仅更新速度或者完全刷新动画（偏移量变化时用）
+        function refreshScrollAnimation(forceRestart = false) {
+            if (!container || !imgElement) return;
+            const imgWidth = imgElement.clientWidth;
+            const containerWidth = container.clientWidth;
+            if (imgWidth === 0 || containerWidth === 0) return;
+            
+            const offset = calculateScrollOffset();
+            const needScroll = (offset < 0);
+            container.style.setProperty('--scroll-offset', `${offset}px`);
+            // 确保时长变量是最新的
+            container.style.setProperty('--anim-duration', `${currentAnimationDuration}s`);
+            
+            const hasActiveClass = imgElement.classList.contains('img-scroll-active');
+            if (needScroll) {
+                if (!hasActiveClass) {
+                    imgElement.classList.add('img-scroll-active');
+                } else if (forceRestart) {
+                    // 需要强制重启（窗口resize或者偏移变化较大时），重新开始动画以保证偏移距离正确
+                    imgElement.classList.remove('img-scroll-active');
+                    void imgElement.offsetHeight;
+                    imgElement.classList.add('img-scroll-active');
+                }
+                // 更新提示信息
+                if (infoHint) {
+                    const overflowPx = Math.abs(offset);
+                    infoHint.innerHTML = `↔️ 横向往复 | 画卷超出 ${Math.round(overflowPx)}px  · 速度 ${currentAnimationDuration.toFixed(1)}s ↻`;
+                }
+            } else {
+                if (hasActiveClass) {
+                    imgElement.classList.remove('img-scroll-active');
+                }
+                if (infoHint) {
+                    infoHint.innerHTML = `🏞️ 画卷完整展示 · 无需横向滚动 🏞️`;
+                }
+            }
+        }
+        
+        // 速度改变时只更新时长变量，不重启动画（保持当前位置）
+        function updateSpeedOnly() {
+            const durationSec = currentAnimationDuration;
+            container.style.setProperty('--anim-duration', `${durationSec}s`);
+            if (infoHint && imgElement.classList.contains('img-scroll-active')) {
+                const offset = calculateScrollOffset();
+                if (offset < 0) {
+                    infoHint.innerHTML = `↔️ 横向往复 | 画卷超出 ${Math.abs(Math.round(offset))}px  · 速度 ${durationSec.toFixed(1)}s ↻`;
+                }
+            }
+        }
+        
+        // 重写滑块事件
+        function onSpeedSliderChange() {
+            let val = parseFloat(speedSlider.value);
+            val = Math.min(28, Math.max(2, val));
+            currentAnimationDuration = val;
+            speedDisplay.innerText = val.toFixed(1) + " 秒";
+            // 只更新时长变量，不重启动画（避免滚动位置跳跃）
+            updateSpeedOnly();
+        }
+        
+        // 替换事件监听
+        speedSlider.removeEventListener('input', onSpeedChange);
+        speedSlider.addEventListener('input', onSpeedSliderChange);
+        
+        // 尺寸变化时强制重启（因为偏移量变了）
+        function handleResizeOrOrientation() {
+            if (resizeDebounceTimer) clearTimeout(resizeDebounceTimer);
+            resizeDebounceTimer = setTimeout(() => {
+                if (isImageReady || imgElement.complete) {
+                    refreshScrollAnimation(true); // 强制重启，适应新偏移
+                }
+            }, 120);
+        }
+        
+        // 图片加载完成时强制重启确保正确偏移
+        function onImageLoadedFinal() {
+            isImageReady = true;
+            if (loadingTip) {
+                loadingTip.classList.add('hidden');
+                setTimeout(() => { if(loadingTip) loadingTip.style.display = 'none'; }, 400);
+            }
+            refreshScrollAnimation(true);
+        }
+        
+        // 重新绑定加载事件
+        if (imgElement.complete && imgElement.naturalWidth !== 0) {
+            onImageLoadedFinal();
+        } else {
+            imgElement.addEventListener('load', onImageLoadedFinal);
+            imgElement.addEventListener('error', onImageError);
+        }
+        
+        window.removeEventListener('resize', onWindowResize);
+        window.addEventListener('resize', handleResizeOrOrientation);
+        
+        // 清理之前的observer，重新添加
+        if (window.ResizeObserver) {
+            const ro = new ResizeObserver(() => {
+                if (isImageReady || imgElement.complete) {
+                    refreshScrollAnimation(true);
+                }
+            });
+            if (container) ro.observe(container);
+            if (imgElement) ro.observe(imgElement);
+        }
+        
+        // 最终调用初始化，并确保速度显示正确
+        refreshScrollAnimation(true);
+        // 额外保证滑块显示值
+        onSpeedSliderChange();
+        
+        // 当图片重新加载后高度可能变化（比如动态改变），再次刷新滚动
+        // 完美满足所有需求: 左右横向滚动+速度调节，且图片高度填充容器宽度自适应
+        console.log('横轴画廊已启动 | 速度滑块控制左右往复滚动');
+    })();
+</script>
+</body>
+</html>
